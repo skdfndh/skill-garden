@@ -174,7 +174,8 @@ $script:Patterns = @(
     # ---------- P1：个人信息 ----------
     @{ Id = 'cn-phone'; Sev = 'P1'; Cat = 'pii'; Rx = '(?<![0-9])1[3-9][0-9]{9}(?![0-9])'; Desc = '中国大陆手机号' }
     @{ Id = 'cn-id-card'; Sev = 'P1'; Cat = 'pii'; Rx = '(?<![0-9Xx])[1-9][0-9]{5}(?:19|20)[0-9]{2}(?:0[1-9]|1[0-2])(?:0[1-9]|[12][0-9]|3[01])[0-9]{3}[0-9Xx](?![0-9Xx])'; Desc = '中国大陆身份证号' }
-    @{ Id = 'email'; Sev = 'P1'; Cat = 'pii'; Rx = '\b[A-Za-z0-9._%+\-]+@[A-Za-z0-9\-]+(?:\.[A-Za-z0-9\-]+)*\.[A-Za-z]{2,}\b'; Desc = '邮箱地址'; Allow = $script:EmailAllowlist }
+    # 移动端资源命名（Icon@2x.png、splash@3x.png）天然长得像邮箱，不加排除会命中整个 Xcode 资源清单
+    @{ Id = 'email'; Sev = 'P1'; Cat = 'pii'; Rx = '\b[A-Za-z0-9._%+\-]+@(?!\d+x\.)[A-Za-z0-9\-]+(?:\.[A-Za-z0-9\-]+)*\.[A-Za-z]{2,}\b'; Desc = '邮箱地址'; Allow = $script:EmailAllowlist }
     @{ Id = 'win-user-path'; Sev = 'P1'; Cat = 'pii'; Rx = '(?i)[A-Z]:\\Users\\[^\\\s''"]{1,40}\\'; Desc = '本机绝对路径（暴露 Windows 用户名，改为相对路径）' }
     @{ Id = 'unix-home-path'; Sev = 'P1'; Cat = 'pii'; Rx = '/(?:home|Users)/([A-Za-z0-9._\-]{2,32})/'; Desc = '本机绝对路径（暴露用户名，改为相对路径）'; Allow = @('runner', 'ubuntu', 'app', 'user', 'node', 'root', 'vscode', 'circleci', 'travis', 'jenkins', 'yourname', 'username', 'me') }
 
