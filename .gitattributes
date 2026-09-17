@@ -1,0 +1,19 @@
+# 默认：仓库内统一使用 LF，检出时由 git 处理换行符，避免 Windows 用户提交后全仓库显示为改动
+* text=auto eol=lf
+
+# Windows 脚本保留 CRLF（部分环境对 LF 的 .ps1/.bat 处理异常）
+*.ps1 text eol=crlf
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+# 二进制文件：禁止换行符转换与文本 diff
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.webp binary
+*.pdf binary
+*.zip binary
+*.gz binary
+*.7z binary

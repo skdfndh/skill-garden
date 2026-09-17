@@ -1,0 +1,41 @@
+# 凭据与密钥——绝不入库
+.env
+.env.*
+!.env.example
+!.env.sample
+*.pem
+*.key
+*.p12
+*.pfx
+*.jks
+*.keystore
+*.snk
+credentials.json
+credentials.yaml
+secrets.json
+secrets.yaml
+id_rsa
+id_ed25519
+.netrc
+_netrc
+.npmrc
+.pypirc
+.git-credentials
+
+# 扫描报告产物：报告本身含敏感位置清单，属于隐私文件
+report.json
+report.md
+*-privacy-scan/
+
+# 编辑器与系统
+.idea/
+.vscode/
+*.swp
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# 临时与日志
+*.log
+tmp/
+temp/

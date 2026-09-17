@@ -1,0 +1,45 @@
+# 凭据与密钥——任何项目都必须忽略
+.env
+.env.*
+!.env.example
+!.env.sample
+*.pem
+*.key
+*.p12
+*.pfx
+*.jks
+*.keystore
+credentials.json
+credentials.yaml
+secrets.json
+secrets.yaml
+id_rsa
+id_rsa.pub
+id_ed25519
+.netrc
+_netrc
+.npmrc
+.pypirc
+.git-credentials
+serviceaccount*.json
+*service-account*.json
+
+# 扫描报告产物：本身就是敏感文件，绝不入库
+report.json
+report.md
+
+# 编辑器与系统
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# 临时与日志
+*.log
+*.tmp
+tmp/
+temp/
+.cache/
