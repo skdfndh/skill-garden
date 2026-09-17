@@ -71,9 +71,12 @@ $script:SkipDirs = @(
     '.parcel-cache', '.svelte-kit', '.angular', '.docusaurus'
 ) + $Exclude
 
+# 注意：匹配用的是**完整路径**，所以不带通配符的文件名永远匹配不到——
+# package-lock.json 曾经就是这样一条死规则（*.lock 因为有 * 而正常，掩盖了它）。
+# 凡是按文件名匹配的规则都必须带前导 *。
 $script:SkipFilePatterns = @(
-    '*.lock', 'package-lock.json', 'pnpm-lock.yaml', 'yarn.lock', 'poetry.lock',
-    'Cargo.lock', 'composer.lock', 'Gemfile.lock', 'go.sum',
+    '*.lock', '*package-lock.json', '*pnpm-lock.yaml', '*yarn.lock', '*poetry.lock',
+    '*Cargo.lock', '*composer.lock', '*Gemfile.lock', '*go.sum', '*bun.lockb',
     '*.min.js', '*.min.css', '*.map',
     '*.bundle.js', '*.chunk.js', '*.esm.js', '*.cjs', '*.umd.js',
     '*.png', '*.jpg', '*.jpeg', '*.gif', '*.webp', '*.ico', '*.bmp', '*.svg',
