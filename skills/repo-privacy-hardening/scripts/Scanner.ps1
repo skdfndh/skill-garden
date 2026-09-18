@@ -967,7 +967,7 @@ if ($scanReadme) {
             foreach ($h in $readme.sectionHeadings) { $md.Add("- $h") }
             $md.Add('')
         }
-        $md.Add('> 结构正确性只占一半。视觉与说服力的优化规则见 `references/github-layout.md` 的「README 设计」一节。')
+        $md.Add('> 结构正确性只占一半。视觉与说服力的优化规则见 `references/readme-design.md`。')
         $md.Add('')
     }
 }
@@ -1016,6 +1016,20 @@ else {
 
 $md.Add('## 下一步建议')
 $md.Add('')
+# README 的问题不阻塞"能不能公开"，但阻塞"公开了有没有人用"。
+# 只说"可以直接进入开源改造"是误导——扫描器报告里明明列着占位符和许可证缺口。
+$readmeBlockers = @()
+if ($scanReadme -and $readme.path) {
+    if ($readme.placeholders.Count -gt 0) { $readmeBlockers += 'README 里有未替换的占位符' }
+    if ($readme.brokenLinks.Count -gt 0) { $readmeBlockers += 'README 有死链' }
+    if ($readme.brokenImages.Count -gt 0) { $readmeBlockers += 'README 的图片引用失效' }
+    if (-not $readme.hasRealRepoUrl) { $readmeBlockers += 'README 没有可用的克隆地址' }
+    if (-not $readme.licenseInReadme) { $readmeBlockers += 'README 没有许可证章节' }
+}
+elseif ($scanReadme -and -not $readme.path) {
+    $readmeBlockers += '仓库还没有 README'
+}
+
 if ($bySeverity.P0 -gt 0) {
     $md.Add('1. **先轮换 P0 密钥**，再去清理文件——顺序反了等于没处理。')
     $md.Add('2. 把敏感文件移出仓库，改用环境变量或密钥管理服务；同时同步更新部署方式。')
@@ -1026,7 +1040,16 @@ elseif ($bySeverity.P1 -gt 0) {
     $md.Add('2. 确认无误后补齐 `.gitignore` 与开源工程文件。')
 }
 else {
-    $md.Add('可以直接进入开源改造阶段：补齐 README、LICENSE、.gitignore 与协作文件。')
+    $md.Add('密钥与个人信息层面没有发现问题，可以进入开源改造阶段：补齐 README、LICENSE、.gitignore 与协作文件。')
+}
+
+if ($readmeBlockers.Count -gt 0) {
+    $md.Add('')
+    $md.Add('README 还有以下问题待处理（不阻塞公开，但影响别人愿不愿意用）：')
+    $md.Add('')
+    foreach ($b in $readmeBlockers) { $md.Add("- $b") }
+    $md.Add('')
+    $md.Add('优化顺序建议：先修正确性硬伤（占位符、死链、许可证），再重写「第一句话 + 快速开始」，最后补截图与视觉细节。规则见 `references/readme-design.md`。')
 }
 
 Set-Content -LiteralPath $mdPath -Value ($md -join [Environment]::NewLine) -Encoding utf8
