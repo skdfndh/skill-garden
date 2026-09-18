@@ -38,4 +38,4 @@
 
 ## 当前状态
 
-- 已收录 Skill：`project-context-maintainer`、`repo-privacy-hardening`。
+- 已收录 Skill：`project-context-maintainer`、`repo-privacy-hardening`、`skill-optimizer`。

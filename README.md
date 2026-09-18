@@ -10,6 +10,7 @@
 | --- | --- |
 | [`project-context-maintainer`](skills/project-context-maintainer/SKILL.md) | 创建并维护面向 AI 的 `AGENTS.md` 项目上下文与工作约定。 |
 | [`repo-privacy-hardening`](skills/repo-privacy-hardening/SKILL.md) | 扫描项目中的密钥、个人信息与内网信息，清理后将项目改造为可公开的 GitHub 仓库。 |
+| [`skill-optimizer`](skills/skill-optimizer/SKILL.md) | 审查并改写已有 Agent Skill，优化触发范围、指令质量、边界与信息结构。 |
 
 ## 怎么用
 
