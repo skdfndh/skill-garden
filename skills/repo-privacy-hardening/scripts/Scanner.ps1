@@ -668,10 +668,36 @@ if ($scanReadme) {
         # 注意不要把裸的 TODO/FIXME/TBD 算进来：它们在源码里是正当的待办标记，
         # 而且项目名里就可能含 "todo"（如 todo-reminder），报出来纯属噪音。
         # 这里只抓**模板没填**的痕迹。
+        # 尖括号占位符有个歧义：`git clone <仓库地址>` 里的必须替换，而目录结构图里的
+        # `<skill-name>/` 是合法的文档占位，读者本来就不该替换它。
+        #
+        # 试过两个判据都不可靠："出现次数 ≥2"（单个真残留会漏报）、"是否在代码块内"
+        # （目录树也在代码块里）。真正可靠的特征是**读者会不会照抄这一行**：
+        # 以 $ / > / # / 字母开头的行是可执行命令，里面的占位符必须替换；
+        # 以制表符或树形符号开头的是结构示意图，放行。
+        #
+        # 另有一条不依赖上下文的硬规则：占位符名字本身带"地址/用户名/密钥"这类
+        # 明确指向待填内容的词，无论出现在哪里都要报。
+        $anglePlaceholders = @()
         foreach ($m in [regex]::Matches($content, '<[^>\r\n]{1,40}>')) {
-            # 排除 HTML 注释与合法的内联标签
             if ($m.Value -match '^</?(?:!--|br|img|div|p|sub|sup|details|summary|kbd|b|i|code|a\s)') { continue }
-            $readme.placeholders += $m.Value
+
+            $lineStart = $content.LastIndexOf("`n", [Math]::Max(0, $m.Index - 1)) + 1
+            $line = $content.Substring($lineStart, $m.Index - $lineStart)
+
+            $looksLikeCommand = $line -match '^\s*(?:\$|>|#|[A-Za-z])'
+            $looksLikeDiagram = $line -match '^\s*(?:[│├└─┌┐┘┬┴┼]|[-*]\s)'
+            $selfEvident = $m.Value -match '(?i)地址|用户名|密钥|密码|密码|token|key|secret|password|url|repo|域名|账号'
+
+            $anglePlaceholders += [pscustomobject]@{
+                name    = $m.Value
+                suspect = (($looksLikeCommand -and -not $looksLikeDiagram) -or $selfEvident)
+            }
+        }
+        $distinctAngle = @($anglePlaceholders | ForEach-Object { $_.name } | Sort-Object -Unique)
+        # 多个不同占位符说明模板整体没填完；单个则只有落在命令里或名字自明时才报
+        if ($distinctAngle.Count -ge 2 -or @($anglePlaceholders | Where-Object { $_.suspect }).Count -gt 0) {
+            $readme.placeholders += $anglePlaceholders.name
         }
         foreach ($m in [regex]::Matches($content, '(?i)\b(?:your[-_ ]?(?:username|repo|name|org)|OWNER/REPO|USERNAME/REPO|CHANGE[_-]?ME|INSERT[_-]?(?:YOUR|HERE))\b')) {
             $readme.placeholders += $m.Value
@@ -723,7 +749,10 @@ if ($scanReadme) {
         $readme.hasCloneUrl = $content -match '(?i)git\s+clone'
         $readme.hasRealRepoUrl = $content -match 'github\.com/[\w.\-]+/[\w.\-]+'
         $readme.mentionsInstall = $content -match '(?i)install|安装|npm i|pip install|go get|cargo add'
-        $readme.mentionsTest = $content -match '(?i)\btest\b|测试|pytest|vitest|jest|dotnet test|flutter test'
+        # "验证改动"不只等于跑单元测试。编译型项目用构建成功验证、游戏 Mod 用日志确认加载、
+        # 前端用本地起服务看效果，都是正当方式。只认 \btest\b 会把这些项目误判成缺说明。
+        $readme.mentionsTest = ($content -match '(?i)\btest\b|测试|pytest|vitest|jest|dotnet test|flutter test|cargo test|go test|npm test') -or
+                               ($content -match '(?i)构建|编译|dotnet build|npm run build|cargo build|验证|校验|确认加载|LogOutput|运行测试')
 
         # ---- 6. 结构：标题层级 ----
         $readme.sectionHeadings = @(
