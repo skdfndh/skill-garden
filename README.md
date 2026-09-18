@@ -8,9 +8,22 @@
 
 | Skill | 用途 |
 | --- | --- |
-| [`project-context-maintainer`](skills/project-context-maintainer/SKILL.md) | 创建并维护面向 AI 的 `AGENTS.md` 项目上下文与工作约定。 |
-| [`repo-privacy-hardening`](skills/repo-privacy-hardening/SKILL.md) | 扫描项目中的密钥、个人信息与内网信息，清理后将项目改造为可公开的 GitHub 仓库。 |
-| [`skill-optimizer`](skills/skill-optimizer/SKILL.md) | 审查并改写已有 Agent Skill，优化触发范围、指令质量、边界与信息结构。 |
+| [`project-context-maintainer`](skills/project-context-maintainer/README.md) | 创建并维护面向 AI 的 `AGENTS.md` 项目上下文与工作约定。 |
+| [`repo-privacy-hardening`](skills/repo-privacy-hardening/README.md) | 扫描项目中的密钥、个人信息与内网信息，清理后将项目改造为可公开的 GitHub 仓库。 |
+| [`skill-optimizer`](skills/skill-optimizer/README.md) | 审查并改写已有 Agent Skill，优化触发范围、指令质量、边界与信息结构。 |
+
+点进任一技能可以看到它的完整说明：解决什么问题、触发场景、使用示例、产出物与安装方式。
+
+## 每个技能有两个文档
+
+这不是重复，是给两类读者看的：
+
+| 文件 | 读者 | 内容 |
+| --- | --- | --- |
+| `README.md` | **人** | 这个技能是干什么的、我该不该用、怎么装 |
+| `SKILL.md` | **AI Agent** | 收到任务后该怎么一步步执行 |
+
+`SKILL.md` 里是给机器读的祈使句与判定规则，直接甩给人看是错位的。想了解技能做什么看 README，想看它具体怎么工作看 `SKILL.md`。
 
 ## 怎么用
 
@@ -51,7 +64,8 @@ Copy-Item -Recurse skill-garden\skills\repo-privacy-hardening "$HOME\.agents\ski
 skill-garden/
 └── skills/
     └── <skill-name>/
-        ├── SKILL.md          # 必需，入口：YAML frontmatter + 工作流说明
+        ├── README.md         # 面向人类：这个技能做什么、怎么用
+        ├── SKILL.md          # 必需，面向 Agent：YAML frontmatter + 工作流说明
         ├── scripts/          # 可选，确定性任务的可执行代码
         ├── references/       # 可选，按需加载的详细资料
         └── assets/           # 可选，模板与素材

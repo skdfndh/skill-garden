@@ -35,6 +35,12 @@ report.md
 Thumbs.db
 desktop.ini
 
+# Agent 工具的运行时产物：会话日志、任务事件、本地配置。
+# 这些是工具生成的，不含仓库内容，但会随会话不断变化，提交进来只会制造无意义的 diff。
+.codex/
+.claude/
+.agents/
+
 # 临时与日志
 *.log
 tmp/
