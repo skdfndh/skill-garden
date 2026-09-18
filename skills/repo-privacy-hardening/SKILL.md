@@ -38,10 +38,12 @@ pwsh -File ./scripts/Scanner.ps1 -Path <项目根> -OutDir <仓库外的目录>
 
 | 参数 | 用途 |
 | --- | --- |
-| `-Mode secrets\|pii\|infra\|hygiene\|all` | 只查某一类，便于分阶段推进 |
+| `-Mode secrets\|pii\|infra\|hygiene\|readme\|all` | 只查某一类，便于分阶段推进 |
 | `-Exclude <目录名...>` | 排除额外目录；依赖目录与构建产物默认已排除 |
 | `-All` | 取消每类 200 条的上限 |
 | `-Json` | 只输出 JSON，便于脚本消费 |
+
+`-Mode readme` 做的是**正确性**检查，不是存在性检查：死链、未替换的占位符、图片引用失效、README 声称的许可证与仓库里的 LICENSE 是否对得上、克隆地址是不是模板残留，最后给出一个 0-10 的健康分。它抓的都是"本地看着没问题、只有读者会撞上"的缺陷。
 
 退出码 `1` 表示存在 P0 问题，可以直接用它在自动化里卡发布。
 
@@ -100,8 +102,8 @@ git log origin/<branch> --oneline | head   # 是否已经推送
 
 **核心四件套（必须）**
 
-- `README.md`：一句话说清项目是什么、给谁用；安装、运行、测试命令必须是从本仓库实际跑通的；截图用占位路径而不是虚构链接
-- `LICENSE`：默认 MIT，年与版权人按用户信息填；换 Apache-2.0 或 GPL 前先问，许可证不可随意更改
+- `README.md`：一句话说清项目是什么、给谁用；安装、运行、测试命令必须是从本仓库实际跑通的；截图用占位路径而不是虚构链接。**已有 README 时不要直接重写**——先跑 `-Mode readme` 拿客观问题清单，再从"第一句话 + 快速开始"开始逐项优化，每改完一步让用户看一眼。设计规则见 `./references/readme-design.md`。
+- `LICENSE`：默认 MIT，年与版权人按用户信息填；换 Apache-2.0 或 GPL 前先问，许可证不可随意更改。**README 里必须有许可证章节并与 LICENSE 文件一致**——只有文件没有声明，读者不知道能不能用
 - `.gitignore`：按语言从 `./assets/gitignore-templates/` 取模板，并确保至少覆盖 `.env*`、`*.pem|*.key|*.p12|*.pfx`、依赖目录、构建产物、IDE 配置
 - `.gitattributes`：统一换行符，避免 Windows 用户提交后整个仓库显示为改动；二进制文件标记为 binary
 
@@ -139,7 +141,9 @@ gh repo edit --add-topic <topic1> --add-topic <topic2>
 
 - [ ] 复扫 `-Mode secrets` 与 `-Mode pii` 均无新增
 - [ ] P0 清单里的每个密钥都已轮换，而不只是从文件里删掉
+- [ ] 跑 `-Mode readme`：无死链、无未替换占位符、许可证声明与 LICENSE 一致
 - [ ] 从零克隆一份到临时目录，按 README 的步骤能跑起来
+- [ ] README 提到的配置文件、脚本、命令都还存在（文档漂移检查）
 - [ ] 仓库根目录没有残留的临时脚本、个人笔记、`report.json` 之类的扫描产物
 - [ ] `git log` 的作者姓名与邮箱是用户愿意公开的
 - [ ] 仓库页面的 description 与 topics 已设置
@@ -151,6 +155,7 @@ gh repo edit --add-topic <topic1> --add-topic <topic2>
 - `./references/secret-patterns.md` —— 凭据类型与误报规避、掩码规则、git 历史重写方案（第 5 步必读）
 - `./references/privacy-checklist.md` —— 正则抓不到的非文本隐私：截图、数据集、二进制、元数据（第 2、3 步用）
 - `./references/github-layout.md` —— 开源仓库的文件规范、LICENSE 选择、README 结构与 CI 模板对应关系（第 6 步用）
+- `./references/readme-design.md` —— README 的说服力与视觉优化：首屏、排版、徽章、截图、常见错误清单、改进工作流（写或优化 README 时读）
 - `./assets/gitignore-templates/` —— 按语言的 `.gitignore` 模板
 - `./assets/README-template.md`、`./assets/LICENSE-MIT.txt` —— 可直接取用的模板
 

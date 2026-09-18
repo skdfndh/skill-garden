@@ -19,7 +19,7 @@
 
 .PARAMETER Mode
     secrets（密钥令牌）/ pii（个人信息）/ infra（内网信息）/ hygiene（仓库结构与二进制）
-    / all（默认，全部）。
+    / readme（README 正确性审计：死链、占位符、许可证一致性、健康分）/ all（默认，全部）。
 
 .PARAMETER Exclude
     额外排除的目录名。依赖目录与构建产物默认已排除，因为它们几乎只会制造噪音。
@@ -44,7 +44,7 @@
 param(
     [string]$Path = '.',
     [string]$OutDir = (Join-Path ([System.IO.Path]::GetTempPath()) 'repo-privacy-scan'),
-    [ValidateSet('all', 'secrets', 'pii', 'infra', 'hygiene')]
+    [ValidateSet('all', 'secrets', 'pii', 'infra', 'hygiene', 'readme')]
     [string]$Mode = 'all',
     [string[]]$Exclude = @(),
     [switch]$All,
@@ -361,6 +361,7 @@ $scanSecrets = $Mode -in @('all', 'secrets')
 $scanPii = $Mode -in @('all', 'pii')
 $scanInfra = $Mode -in @('all', 'infra')
 $scanHygiene = $Mode -in @('all', 'hygiene')
+$scanReadme = $Mode -in @('all', 'readme')
 
 $script:RawFindings = [System.Collections.Generic.List[object]]::new()
 # 已被具体规则命中的值（掩码形式），用于让高熵兜底规则保持沉默
@@ -625,6 +626,132 @@ if ($scanHygiene) {
 
 #endregion
 
+#region README 审计
+
+# 卫生检查只回答"README 存在吗"，而 README 的问题几乎全是**正确性**问题：
+# 克隆地址是不是占位符、链接指向的文件还在不在、声称的许可证与仓库里的
+# LICENSE 是否一致、文档提到的配置文件是否已被删除。
+# 这些用 Test-Path 一个都查不出来，必须拿文档去和仓库现状对照。
+$readme = [ordered]@{
+    path             = $null
+    sizeBytes        = 0
+    lineCount        = 0
+    placeholders     = @()
+    brokenLinks      = @()
+    brokenImages     = @()
+    licenseClaimed   = $null
+    licenseFile      = $null
+    licenseInReadme  = $false
+    hasCloneUrl      = $false
+    hasRealRepoUrl   = $false
+    mentionsInstall  = $false
+    mentionsTest     = $false
+    sectionHeadings  = @()
+    score            = 0
+    scoreMax         = 10
+    scoreNotes       = @()
+}
+
+if ($scanReadme) {
+    $readmeName = @('README.md', 'README.rst', 'README.txt', 'readme.md') |
+        Where-Object { Test-Path -LiteralPath (Join-Path $root $_) } | Select-Object -First 1
+
+    if ($readmeName) {
+        $readmePath = Join-Path $root $readmeName
+        $readme.path = $readmeName
+        $readme.sizeBytes = (Get-Item -LiteralPath $readmePath).Length
+        $content = Get-Content -LiteralPath $readmePath -Raw -ErrorAction SilentlyContinue
+        if ($null -eq $content) { $content = '' }
+        $readme.lineCount = ($content -split "`n").Count
+
+        # ---- 1. 未替换的占位符：最常见的"我本地看着没问题"型缺陷 ----
+        # 注意不要把裸的 TODO/FIXME/TBD 算进来：它们在源码里是正当的待办标记，
+        # 而且项目名里就可能含 "todo"（如 todo-reminder），报出来纯属噪音。
+        # 这里只抓**模板没填**的痕迹。
+        foreach ($m in [regex]::Matches($content, '<[^>\r\n]{1,40}>')) {
+            # 排除 HTML 注释与合法的内联标签
+            if ($m.Value -match '^</?(?:!--|br|img|div|p|sub|sup|details|summary|kbd|b|i|code|a\s)') { continue }
+            $readme.placeholders += $m.Value
+        }
+        foreach ($m in [regex]::Matches($content, '(?i)\b(?:your[-_ ]?(?:username|repo|name|org)|OWNER/REPO|USERNAME/REPO|CHANGE[_-]?ME|INSERT[_-]?(?:YOUR|HERE))\b')) {
+            $readme.placeholders += $m.Value
+        }
+        # 指向 example.com 的克隆地址说明模板没填
+        foreach ($m in [regex]::Matches($content, '(?i)github\.com/(?:your|example|username|owner)/[\w.\-]+')) {
+            $readme.placeholders += $m.Value
+        }
+        $readme.placeholders = @($readme.placeholders | Sort-Object -Unique)
+
+        # ---- 2. 相对链接指向的文件是否真的存在 ----
+        foreach ($m in [regex]::Matches($content, '\]\((?!https?://|#|mailto:)([^)\s]+)\)')) {
+            $target = $m.Groups[1].Value.Split('#')[0]
+            if (-not $target) { continue }
+            $decoded = [System.Uri]::UnescapeDataString($target)
+            if (-not (Test-Path -LiteralPath (Join-Path $root $decoded))) {
+                $readme.brokenLinks += $decoded
+            }
+        }
+        $readme.brokenLinks = @($readme.brokenLinks | Sort-Object -Unique)
+
+        # ---- 3. 图片引用是否真的存在 ----
+        foreach ($m in [regex]::Matches($content, '!\[[^\]]*\]\((?!https?://)([^)\s]+)\)')) {
+            $target = $m.Groups[1].Value.Split('#')[0]
+            if (-not $target) { continue }
+            $decoded = [System.Uri]::UnescapeDataString($target)
+            if (-not (Test-Path -LiteralPath (Join-Path $root $decoded))) {
+                $readme.brokenImages += $decoded
+            }
+        }
+        $readme.brokenImages = @($readme.brokenImages | Sort-Object -Unique)
+
+        # ---- 4. 许可证一致性：README 的声明必须与仓库里的文件对得上 ----
+        $licFile = @('LICENSE', 'LICENSE.md', 'LICENSE.txt', 'COPYING') |
+            Where-Object { Test-Path -LiteralPath (Join-Path $root $_) } | Select-Object -First 1
+        $readme.licenseFile = $licFile
+
+        # 许可证章节标题。这里刻意不用 \b 收尾：中文标题（"## 许可"）后面没有词边界，
+        # 用 \b 会导致中文 README 的许可章节全部识别不到。
+        if ($content -match '(?im)^#{1,4}\s*(?:许可证|许可|license|licence|licensing)\s*$') {
+            $readme.licenseInReadme = $true
+        }
+        if ($content -match '(?i)\bMIT\b') { $readme.licenseClaimed = 'MIT' }
+        elseif ($content -match '(?i)Apache[- ]2') { $readme.licenseClaimed = 'Apache-2.0' }
+        elseif ($content -match '(?i)\bGPL\b') { $readme.licenseClaimed = 'GPL' }
+        elseif ($content -match '(?i)\bBSD\b') { $readme.licenseClaimed = 'BSD' }
+
+        # ---- 5. 克隆地址与仓库 URL ----
+        $readme.hasCloneUrl = $content -match '(?i)git\s+clone'
+        $readme.hasRealRepoUrl = $content -match 'github\.com/[\w.\-]+/[\w.\-]+'
+        $readme.mentionsInstall = $content -match '(?i)install|安装|npm i|pip install|go get|cargo add'
+        $readme.mentionsTest = $content -match '(?i)\btest\b|测试|pytest|vitest|jest|dotnet test|flutter test'
+
+        # ---- 6. 结构：标题层级 ----
+        $readme.sectionHeadings = @(
+            [regex]::Matches($content, '(?m)^(#{1,4})\s+(.+?)\s*$') |
+                ForEach-Object { "$($_.Groups[1].Value.Length)级: $($_.Groups[2].Value.Trim())" }
+        )
+
+        # ---- 7. 健康分：把"能不能用"量化成一件事，便于跨仓库比较与追踪改进 ----
+        $checks = [ordered]@{
+            '首句能说清项目是什么'   = ($readme.lineCount -ge 5 -and $content.Length -gt 200)
+            '有真实克隆地址'         = $readme.hasRealRepoUrl
+            '无未替换占位符'         = ($readme.placeholders.Count -eq 0)
+            '无死链'                 = ($readme.brokenLinks.Count -eq 0)
+            '无失效图片'             = ($readme.brokenImages.Count -eq 0)
+            '有许可证文件'           = [bool]$readme.licenseFile
+            'README 声明了许可证'    = $readme.licenseInReadme
+            '声明与 LICENSE 一致'    = ($readme.licenseInReadme -and [bool]$readme.licenseFile)
+            '有安装或运行说明'       = $readme.mentionsInstall
+            '有测试或验证说明'       = $readme.mentionsTest
+        }
+        foreach ($k in $checks.Keys) {
+            if ($checks[$k]) { $readme.score++ } else { $readme.scoreNotes += $k }
+        }
+    }
+}
+
+#endregion
+
 #region 汇总与报告
 
 # 去重：同一文件同一行同一规则只保留一条，否则重复赋值会灌爆报告
@@ -722,6 +849,7 @@ $result = [pscustomobject]@{
     piiValues      = $piiValues
     git           = $gitIntel
     hygiene       = $hygiene
+    readme        = $readme
 }
 
 New-Item -ItemType Directory -Path $OutDir -Force | Out-Null
@@ -792,6 +920,59 @@ if ($piiValues.Count -gt 0) {
     foreach ($u in $piiValues) {
         $md.Add("| ``$($u.masked)`` | $($u.severity) | $($u.count) | $($u.files -join ', ') |")
     }
+    $md.Add('')
+}
+
+$md.Add('## README 审计')
+$md.Add('')
+if ($scanReadme) {
+    if (-not $readme.path) {
+        $md.Add('**未找到 README 文件。** 开源仓库没有 README 等于没有入口，必须补。')
+        $md.Add('')
+    }
+    else {
+        $scoreColor = if ($readme.score -ge 8) { '良好' } elseif ($readme.score -ge 5) { '及格' } else { '需要重写' }
+        $md.Add("**健康分：$($readme.score) / $($readme.scoreMax)**（$scoreColor）")
+        $md.Add('')
+        $md.Add('| 检查项 | 结果 |')
+        $md.Add('| --- | --- |')
+        # 报告行先算好变量再拼接。PowerShell 的双引号字符串里再嵌双引号会截断字符串，
+        # 用反引号转义虽然能过，但下一个改这行的人几乎必然踩坑，所以宁可多两行。
+        $phText = if ($readme.placeholders.Count) { "**$($readme.placeholders.Count) 处**：" + (($readme.placeholders | Select-Object -First 5) -join ' ') } else { '无' }
+        $linkText = if ($readme.brokenLinks.Count) { "**$($readme.brokenLinks.Count) 个**：" + (($readme.brokenLinks | Select-Object -First 5) -join ', ') } else { '无' }
+        $imgText = if ($readme.brokenImages.Count) { "**$($readme.brokenImages.Count) 个**：" + (($readme.brokenImages | Select-Object -First 5) -join ', ') } else { '无' }
+        $licFileText = if ($readme.licenseFile) { "``$($readme.licenseFile)``" } else { '**缺失**' }
+        $licClaimText = if ($readme.licenseInReadme) { "有（$(if ($readme.licenseClaimed) { $readme.licenseClaimed } else { '未识别类型' })）" } else { '**没有许可证章节**' }
+        $cloneText = if ($readme.hasRealRepoUrl) { '含真实仓库 URL' } elseif ($readme.hasCloneUrl) { '**有 git clone 但地址是占位符**' } else { '未提供' }
+
+        $md.Add("| 文件 | ``$($readme.path)``（$($readme.sizeBytes) B，$($readme.lineCount) 行）|")
+        $md.Add("| 未替换的占位符 | $phText |")
+        $md.Add("| 死链（相对路径不存在） | $linkText |")
+        $md.Add("| 失效图片引用 | $imgText |")
+        $md.Add("| 许可证文件 | $licFileText |")
+        $md.Add("| README 声明许可证 | $licClaimText |")
+        $md.Add("| 克隆地址 | $cloneText |")
+        $md.Add("| 安装说明 | $(if ($readme.mentionsInstall) { '有' } else { '**缺**' }) |")
+        $md.Add("| 测试说明 | $(if ($readme.mentionsTest) { '有' } else { '**缺**' }) |")
+        $md.Add('')
+        if ($readme.scoreNotes.Count -gt 0) {
+            $md.Add('未通过的检查项：')
+            $md.Add('')
+            foreach ($n in $readme.scoreNotes) { $md.Add("- $n") }
+            $md.Add('')
+        }
+        if ($readme.sectionHeadings.Count -gt 0) {
+            $md.Add('现有结构：')
+            $md.Add('')
+            foreach ($h in $readme.sectionHeadings) { $md.Add("- $h") }
+            $md.Add('')
+        }
+        $md.Add('> 结构正确性只占一半。视觉与说服力的优化规则见 `references/github-layout.md` 的「README 设计」一节。')
+        $md.Add('')
+    }
+}
+else {
+    $md.Add('（本次未执行 README 审计，可用 `-Mode readme` 单独运行）')
     $md.Add('')
 }
 
